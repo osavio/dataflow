@@ -1,28 +1,18 @@
 services:
-  app:
+  app:                             # PHP-FPM + Laravel
     build:
       context: .
       dockerfile: docker/php/Dockerfile
       args:
         UID: ${UID:-1000}
     image: dataflow:dev
-    deploy:
-      replicas: 2                  # duas instâncias do PHP-FPM
     volumes:
       - .:/var/www/html
     depends_on:
-      db-primary:
+      db:
         condition: service_healthy
-      db-replica-1:
-        condition: service_healthy
-      db-replica-2:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      minio:
-        condition: service_started
 
-  nginx:                           # porta de entrada + load balancer
+  nginx:                           # porta de entrada
     image: nginx:1.27-alpine
     ports:
       - "8000:80"
@@ -38,11 +28,25 @@ services:
     volumes:
       - .:/var/www/html
     depends_on:
+      db:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      db-primary:
-        condition: service_healthy
     restart: unless-stopped
+
+  db:                              # PostgreSQL
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - dados_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   rabbitmq:                        # broker de mensagens + painel web
     image: rabbitmq:3-management-alpine
@@ -59,88 +63,36 @@ services:
       timeout: 5s
       retries: 10
 
-  db-primary:                      # ÚNICO banco de escrita
-    image: postgres:17-alpine
-    command: ["postgres", "-c", "wal_level=replica", "-c", "max_wal_senders=10", "-c", "hot_standby=on"]
+  rustfs:                          # armazenamento de arquivos (compatível com S3)
+    image: rustfs/rustfs:latest
+    command: /data
     environment:
-      POSTGRES_DB: ${DB_DATABASE}
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD}
-    volumes:
-      - dados_pg_primary:/var/lib/postgresql/data
-      - ./docker/postgres/primary/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
-    healthcheck:
-      # -h 127.0.0.1 testa pela rede, evitando "ok" falso durante a inicialização
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${DB_USERNAME} -d ${DB_DATABASE}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  db-replica-1:                    # leitura
-    image: postgres:17-alpine
-    entrypoint: ["sh", "/scripts/replica-entrypoint.sh"]
-    environment:
-      POSTGRES_USER: ${DB_USERNAME}
-      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD}
-    volumes:
-      - dados_pg_replica_1:/var/lib/postgresql/data
-      - ./docker/postgres/replica/entrypoint.sh:/scripts/replica-entrypoint.sh:ro
-    depends_on:
-      db-primary:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME}"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  db-replica-2:                    # leitura
-    image: postgres:17-alpine
-    entrypoint: ["sh", "/scripts/replica-entrypoint.sh"]
-    environment:
-      POSTGRES_USER: ${DB_USERNAME}
-      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD}
-    volumes:
-      - dados_pg_replica_2:/var/lib/postgresql/data
-      - ./docker/postgres/replica/entrypoint.sh:/scripts/replica-entrypoint.sh:ro
-    depends_on:
-      db-primary:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME}"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  minio:                           # armazenamento de arquivos (compatível com S3)
-    image: minio/minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID}
+      RUSTFS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY}
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
     ports:
-      - "9001:9001"                # painel web: http://localhost:9001
+      - "9001:9001"                # console web: http://localhost:9001
     volumes:
-      - dados_minio:/data
+      - dados_rustfs:/data
 
-  minio-init:                      # cria o bucket automaticamente e termina
-    image: minio/mc
+  rustfs-init:                     # cria o bucket automaticamente e termina
+    image: amazon/aws-cli
     depends_on:
-      - minio
+      - rustfs
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
       AWS_BUCKET: ${AWS_BUCKET}
     entrypoint: >
       /bin/sh -c "
-      until mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}; do sleep 2; done;
-      mc mb --ignore-existing local/$${AWS_BUCKET};
+      until aws --endpoint-url http://rustfs:9000 s3api list-buckets > /dev/null 2>&1; do sleep 2; done;
+      aws --endpoint-url http://rustfs:9000 s3api head-bucket --bucket $${AWS_BUCKET} > /dev/null 2>&1
+      || aws --endpoint-url http://rustfs:9000 s3 mb s3://$${AWS_BUCKET};
       "
 
 volumes:
-  dados_pg_primary:
-  dados_pg_replica_1:
-  dados_pg_replica_2:
+  dados_pg:
   dados_rabbitmq:
-  dados_minio:
+  dados_rustfs:
