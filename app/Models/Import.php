@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Import extends Model
 {
-    protected $fillabel = [
+    protected $fillable = [
         'user_id',
         'file_path',
         'status',
