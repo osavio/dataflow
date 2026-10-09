@@ -3,6 +3,7 @@
 namespace App\Http\Services;
 
 use App\Enums\ImportStatus;
+use App\Jobs\ProcessImport;
 use App\Models\Import;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -28,7 +29,7 @@ class ImportService
                 'error_message' => null
             ]);
                 
-            $this->publishImport($import);
+            ProcessImport::dispatch($import);
             
             return $import;
         } catch(Throwable $e) {
@@ -43,10 +44,5 @@ class ImportService
 
             throw new RuntimeException('It was not possible to create the import.', 0, $e);
         }
-    }
-
-    public function publishImport(Import $import): void 
-    {
-        // Publicar no RabbitMQ
     }
 }
