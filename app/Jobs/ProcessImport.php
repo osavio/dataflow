@@ -5,6 +5,7 @@ namespace App\Jobs;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use App\Enums\ImportStatus;
+use App\Http\Services\ImportProcessor;
 use App\Models\Import;
 use Throwable;
 
@@ -23,9 +24,9 @@ class ProcessImport implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(): void
+    public function handle(ImportProcessor $processor): void
     {
-        //
+        $processor->process($this->import);
     }
 
     public function failed(?Throwable $exception): void

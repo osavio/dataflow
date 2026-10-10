@@ -19,7 +19,7 @@ class ImportController extends Controller
         
         return response()->json(
             $import,
-            200
+            202
         );
     }
 }
