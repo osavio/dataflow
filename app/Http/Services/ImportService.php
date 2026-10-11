@@ -2,38 +2,37 @@
 
 namespace App\Http\Services;
 
-use App\Enums\ImportStatus;
 use App\Jobs\ProcessImport;
 use App\Models\Import;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Throwable;
+use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Http\UploadedFile;
 
 class ImportService
 {
-    public function create(array $data): Import
+    public function __construct(private readonly Filesystem $storage) {}
+
+    public function create(UploadedFile $file): Import
     {
         $path = null;
+        $import = null;
 
         try {
-            $path = Storage::disk('s3')->putFile(
-                'imports',
-                $data['file']
-            );
+            $path = $this->storage->putFile('imports', $file);
             
             $import = Import::create([
                 'user_id' => 1, // Modificar para user real
-                'file_path' => $path,
-                'status' => ImportStatus::Pending,
-                'error_message' => null
+                'file_path' => $path
             ]);
                 
             ProcessImport::dispatch($import);
             
             return $import;
         } catch(Throwable $e) {
-            if ($path) Storage::disk('s3')->delete($path);
+            if ($path) $this->storage->delete($path);
 
             Log::error('Failed to create import.', [
                 'user_id' => 1, // Modificar para user real

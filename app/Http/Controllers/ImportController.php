@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\ImportStoreRequest;
+use App\Http\Requests\StoreImportRequest;
 use App\Http\Services\ImportService;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use App\Http\Resources\ImportResource;
 
 class ImportController extends Controller
 {
@@ -13,13 +12,10 @@ class ImportController extends Controller
         private ImportService $importService
     ){}
 
-    public function store(ImportStoreRequest $request): JsonResponse
+    public function store(StoreImportRequest $request): ImportResource
     {
-        $import = $this->importService->create($request->validated());
+        $import = $this->importService->create($request->file('file'));
         
-        return response()->json(
-            $import,
-            202
-        );
+        return new ImportResource($import);
     }
 }
