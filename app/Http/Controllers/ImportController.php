@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreImportRequest;
 use App\Http\Services\ImportService;
 use App\Http\Resources\ImportResource;
+use App\Models\Import;
 
 class ImportController extends Controller
 {
@@ -15,6 +16,15 @@ class ImportController extends Controller
     public function store(StoreImportRequest $request): ImportResource
     {
         $import = $this->importService->create($request->file('file'));
+        
+        return new ImportResource($import);
+    }
+
+    public function show(Import $import): ImportResource
+    {
+        $paginatedItems = $import->items()->paginate(100);
+
+        $import->setRelation('items', $paginatedItems);
         
         return new ImportResource($import);
     }
