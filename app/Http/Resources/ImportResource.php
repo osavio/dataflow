@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Http\Resources\ImportItemResource;
 
 class ImportResource extends JsonResource
 {
@@ -18,8 +19,15 @@ class ImportResource extends JsonResource
             'id' => $this->id,
             'user_id' => $this->user_id,
             'status' => $this->status,
-            'created_at' => $this->created_at,
-            'updated_at' => $this->updated_at
+            'items' => ImportItemResource::collection($this->whenLoaded('items')),
+            'pagination' => $this->when($this->relationLoaded('items'), function () {
+                return [
+                    'current_page' => $this->items->currentPage(),
+                    'last_page' => $this->items->lastPage(),
+                    'per_page' => $this->items->perPage(),
+                    'total' => $this->items->total(),
+                ];
+            })
         ];
     }
 }
