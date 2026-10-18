@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreImportRequest;
-use App\Http\Services\ImportService;
+use App\Services\ImportService;
 use App\Http\Resources\ImportResource;
 use App\Models\Import;
 
@@ -15,7 +15,7 @@ class ImportController extends Controller
 
     public function store(StoreImportRequest $request): ImportResource
     {
-        $import = $this->importService->create($request->file('file'));
+        $import = $this->importService->create($request->user(), $request->file('file'));
         
         return new ImportResource($import);
     }

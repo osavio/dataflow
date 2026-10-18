@@ -5,7 +5,7 @@ namespace App\Jobs;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use App\Enums\ImportStatus;
-use App\Http\Services\ImportProcessor;
+use App\Services\ImportProcessor;
 use App\Models\Import;
 use Throwable;
 
