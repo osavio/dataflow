@@ -45,4 +45,11 @@ class ImportService
             throw new RuntimeException('It was not possible to create the import.', 0, $e);
         }
     }
+
+    public function getImport(Import $import): Import
+    {
+        $paginatedItems = $import->items()->paginate(100);
+
+        return $import->setRelation('items', $paginatedItems);
+    }
 }
