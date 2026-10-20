@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Services;
+namespace App\Services;
 
 use App\Jobs\ProcessImport;
 use App\Models\Import;
@@ -10,12 +10,13 @@ use RuntimeException;
 use Throwable;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
+use App\Models\User;
 
 class ImportService
 {
     public function __construct(private readonly Filesystem $storage) {}
 
-    public function create(UploadedFile $file): Import
+    public function create(User $user, UploadedFile $file): Import
     {
         $path = null;
         $import = null;
@@ -24,7 +25,7 @@ class ImportService
             $path = $this->storage->putFile('imports', $file);
             
             $import = Import::create([
-                'user_id' => 1, // Modificar para user real
+                'user_id' => $user->id,
                 'file_path' => $path
             ]);
                 
@@ -35,7 +36,7 @@ class ImportService
             if ($path) $this->storage->delete($path);
 
             Log::error('Failed to create import.', [
-                'user_id' => 1, // Modificar para user real
+                'user_id' => $user->id,
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
@@ -43,5 +44,12 @@ class ImportService
 
             throw new RuntimeException('It was not possible to create the import.', 0, $e);
         }
+    }
+
+    public function getImport(Import $import): Import
+    {
+        $paginatedItems = $import->items()->paginate(100);
+
+        return $import->setRelation('items', $paginatedItems);
     }
 }
